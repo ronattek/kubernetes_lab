@@ -1,0 +1,8 @@
+---
+cert_info: {
+    'C': "{{ shell_country | default('US') }}",
+    'ST': "{{ shell_state | default('Washington') }}",
+    'L': "{{ shell_location | default('Seattle') }}",
+    'O': "{{ shell_company }}",
+    'CN': "{{ shell_company }}-kubernetes-ca"
+  }

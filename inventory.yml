@@ -1,0 +1,19 @@
+---
+all:
+  hosts:
+    master01:
+        ansible_host: 192.168.0.84
+    worker01:
+        ansible_host: 192.168.0.132
+
+kube_control_plane:
+  hosts:
+    master01:
+  vars:
+    k8_host_type: master
+
+kube_worker_nodes: 
+  hosts:  
+    worker01:
+  vars:
+    k8_host_type: worker

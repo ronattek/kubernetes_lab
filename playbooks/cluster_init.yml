@@ -1,0 +1,17 @@
+---
+- name: k8 install
+  hosts: all
+  gather_facts: True 
+  become: True 
+
+  roles:
+    - cluster-init
+
+- name: Generate all the keys and certs needed for a cluster, do a basic install
+  hosts: localhost
+  gather_facts: true
+  connection: local
+
+  roles:
+    - cluster-cert-generation
+    - kubernetes-install

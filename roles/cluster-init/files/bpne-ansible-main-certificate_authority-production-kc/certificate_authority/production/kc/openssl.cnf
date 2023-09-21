@@ -1,0 +1,3 @@
+authorityKeyIdentifier=keyid,issuer
+keyUsage=digitalSignature
+extendedKeyUsage=serverAuth,clientAuth

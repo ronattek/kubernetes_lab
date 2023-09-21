@@ -1,0 +1,9 @@
+---
+- name: Installing kubeadm, kubelet and kubectl
+  # docs: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+  hosts: all
+  gather_facts: True
+  become: True
+
+  roles:
+    - day-zero-ubuntu

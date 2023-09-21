@@ -1,0 +1,80 @@
+- name: Run worker node tasks
+  block:
+  - name: install prereqs
+    yum:
+      name:
+        - socat
+        - conntrack-tools
+        - ipset
+        - unzip
+        - tar
+        - bind-utils
+      state: latest
+
+  - name: Download binaries
+    get_url:
+      url: "{{ item }}"
+      dest: /root/
+    with_items:
+      - https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-proxy
+      - https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubelet
+
+  - name: Create worker node directories
+    file:
+      path: /var/run/kubernetes
+      state: directory
+
+  - name: make binaries executable
+    shell: |
+      cd /root
+      chmod +x kube-proxy kubelet
+      mv kube-proxy kubelet /usr/local/bin 
+
+  - name: configure service files
+    template:
+      src: ../templates/service_files/{{ item }}.ini
+      dest: /usr/lib/systemd/system/{{ item }}.service
+    with_items:
+      - kubelet
+      - kube-proxy
+
+- name: configure page sizes
+  sysctl:
+    name: vm.nr_hugepages
+    value: '0'
+    sysctl_set: true
+    state: present
+    reload: true
+    sysctl_file: /etc/sysctl.conf
+  ignore_errors: true
+
+# - name: Flush iptables 
+#   shell: |
+#     iptables --flush && \
+#     iptables -t nat --flush
+#   changed_when: false
+
+- name: Restart containerd
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+
+# - name: Install server tools for worker nodes
+#   ansible.builtin.dnf:
+#     name: 
+#       "{{ server_tools }}"
+#     state: present
+
+# - name: Enable multipathd
+#   shell: |
+#     mpathconf --enable --with_multipathd y
+
+# - name: Enable and start server tools for worker nodes
+#   ansible.builtin.systemd:
+#     name: "{{ item }}"
+#     state: started
+#     enabled: true
+#   with_items:
+#     - iscsid 
+#     - multipathd
+#     - iscsi

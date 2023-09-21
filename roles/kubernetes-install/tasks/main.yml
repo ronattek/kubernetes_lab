@@ -1,0 +1,26 @@
+---
+- name:  Move forward with install if the service doesn't seem to be present
+  when: hostvars[inventory_hostname].services['kubelet.service'] is not defined
+  block:
+    - name: /etc/apt/keyrings is not created by default
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: 755      
+
+    - name: Add the repo as a trusted source 
+      shell: > 
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key |  
+          sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg --yes &&
+        echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | 
+          sudo tee /etc/apt/sources.list.d/kubernetes.list
+      
+    - name: Now that we trust it, lets get more stuff installed
+      apt:
+        name: "{{ item }}"
+        state: "{{ item.state | default('present') }}"
+        update_cache: True
+      with_items:
+        - kubelet 
+        - kubeadm 
+        - kubectl

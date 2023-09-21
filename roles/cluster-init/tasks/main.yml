@@ -1,0 +1,25 @@
+---
+- name: Confirm k8_host_type is defined
+  assert:
+    that:
+      - k8_host_type is defined
+
+- name: control plane tasks
+  block:
+    - name: distribute control plane kubeconfigs
+      include: control_plane_kubeconfigs.yml
+
+    - name: configure control plane
+      include: control_plane_tasks.yml
+  when: k8_host_type == "master"
+  tags: control_plane_tasks
+
+- name: worker node tasks
+  block:
+    - name: configure worker nodes
+      include: worker_node_kubeconfigs.yml
+
+    - name: configure worker nodes
+      include: worker_node_tasks.yml
+  when: k8_host_type == "worker"
+  tags: worker_node_tasks

@@ -1,0 +1,166 @@
+---
+# TODO:  There must be a better module to do this stuff...
+
+- name: Check that company name is set
+  ansible.builtin.assert:
+    that:
+      - shell_company is defined
+
+- name: Temp directory
+  register: cert_temp_dir
+  file:
+    path: "/tmp/ansible/{{ ansible_date_time.year }}{{ ansible_date_time.month }}{{ ansible_date_time.day }}"
+    state: directory
+
+- name: Set up directory structure
+  file:
+    path: "{{ cert_temp_dir.path }}/{{ item }}"
+    state: directory
+  with_items:
+    - newcerts
+    - certs
+    - keys
+
+- name: CA key and cert creation
+  shell: |
+    openssl req -subj '/CN={{ cert_info.CN }}/O={{ cert_info.O }}/C={{ cert_info.C }}' \
+      -extensions v3_ca \
+      -days 7300 \
+      -nodes \
+      -x509 \
+      -keyout {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-kubernetes-ca.key \
+      -out {{ kube_ca_cert }}
+  vars:
+    kube_ca_cert: "{{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-kubernetes-ca.crt"
+  register: ca_key_and_cert_creation
+
+- name: Admin key and csr
+  shell: | 
+    openssl req -nodes -newkey rsa:2048 \
+      -subj '/CN={{ cert_info.CN }}/O={{ cert_info.O }}/C={{ cert_info.C }}' \
+      -keyout {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-admin.key \
+      -out {{ cert_temp_dir.path }}/newcerts/{{ cert_info.O }}-admin.csr
+  register: admin_key_csr 
+
+- name: Admin cert
+  shell: | 
+    openssl x509 -req -in {{ cert_temp_dir.path }}/newcerts/{{ cert_info.O }}-admin.csr \
+      -CAcreateserial \
+      -CA {{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-kubernetes-ca.crt \
+      -CAkey {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-kubernetes-ca.key \
+      -out {{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-admin.crt \
+      -days 2650
+
+- name: Creating Kubelet client keys
+  shell: | 
+    openssl genrsa -out {{ cert_temp_dir.path }}/keys/{{ item }}.key
+  with_items: "{{ hostvars }}" 
+  run_once: true   
+
+- name: Create certs for clients
+  shell: | 
+    openssl req -new \
+      -subj "/CN={{ cert_info.CN }}/O={{ cert_info.O }}/C={{ cert_info.C }}" \
+      -key {{ cert_temp_dir.path }}/keys/{{ item }}.key \
+      -out {{ cert_temp_dir.path }}/newcerts/{{ item }}.csr  
+  with_items: "{{ hostvars }}" 
+  run_once: true
+
+- name: Signing certs for clients"
+  shell:
+    openssl x509 -req -in {{ cert_temp_dir.path }}/newcerts/{{ item }}.csr \
+        -CA {{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-kubernetes-ca.crt \
+        -CAkey {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-kubernetes-ca.key \
+        -out {{ cert_temp_dir.path }}/certs/{{ item }}.crt \
+        -CAcreateserial \
+        -days 2650
+  with_items: "{{ hostvars }}" 
+  run_once: true
+
+- name: Create Controller Manager key
+  shell: |
+    openssl genrsa -out {{ cert_temp_dir.path }}/keys/kube-controller.key
+
+- name: Create Controller Manager csr
+  shell: | 
+    openssl req -new \
+      -key {{ cert_temp_dir.path }}/keys/kube-controller.key -subj req -new \
+      -out {{ cert_temp_dir.path }}/newcerts/kube-controller.csr \
+      -subj "/CN={{ cert_info.CN }}/O={{ cert_info.O }}/C={{ cert_info.C }}"
+
+- name: Create Controller Manager cert
+  shell: |
+    openssl x509 -req -in {{ cert_temp_dir.path }}/newcerts/kube-controller.csr \
+      -CA {{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-kubernetes-ca.crt \
+      -CAkey {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-kubernetes-ca.key \
+      -out {{ cert_temp_dir.path }}/certs/kube-controller.crt \
+      -CAcreateserial \
+      -days 2650 
+
+- name: Create Proxy Cert
+  shell: | 
+    openssl genrsa -out {{ cert_temp_dir.path }}/keys/kube-proxy.key
+
+- name: Generate the Proxy CSR
+  shell: | 
+    openssl req -new \
+      -key {{ cert_temp_dir.path }}/keys/kube-proxy.key -subj req -new \
+      -out {{ cert_temp_dir.path }}/newcerts/kube-proxy.csr \
+      -subj ""/CN={{ cert_info.CN }}/O={{ cert_info.O }}/C={{ cert_info.C }}""
+
+- name: Generate the Proxy Cert
+  shell:
+    openssl x509 -req -in {{ cert_temp_dir.path }}/newcerts/kube-proxy.csr \
+      -CA {{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-kubernetes-ca.crt \
+      -CAkey {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-kubernetes-ca.key \
+      -out {{ cert_temp_dir.path }}/certs/kube-proxy.crt \
+      -CAcreateserial \
+      -days 2650 
+
+# - name: Kube scheudler certs
+- name: Create scheduler Cert
+  shell: | 
+    openssl genrsa -out {{ cert_temp_dir.path }}/keys/kube-scheduler.key
+
+- name: Generate the scheduler CSR
+  shell: | 
+    openssl req -new \
+      -key {{ cert_temp_dir.path }}/keys/kube-scheduler.key -subj req -new \
+      -out {{ cert_temp_dir.path }}/newcerts/kube-scheduler.csr \
+      -subj ""/CN={{ cert_info.CN }}/O={{ cert_info.O }}/C={{ cert_info.C }}""
+
+- name: Generate the scheduler Cert
+  shell:
+    openssl x509 -req -in {{ cert_temp_dir.path }}/newcerts/kube-scheduler.csr \
+      -CA {{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-kubernetes-ca.crt \
+      -CAkey {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-kubernetes-ca.key \
+      -out {{ cert_temp_dir.path }}/certs/kube-scheduler.crt \
+      -CAcreateserial \
+      -days 2650 
+
+# API cert
+- name: Create API Cert for each host
+  shell: | 
+    openssl genrsa -out {{ cert_temp_dir.path }}/keys/kube-{{ item }}-api-cert.key
+  with_items: "{{ hostvars }}" 
+  run_once: true
+
+- name: Generate the CSR for each host
+  shell: | 
+    openssl req -new \
+      -key {{ cert_temp_dir.path }}/keys/kube-{{ item }}-api-cert.key -subj req -new \
+      -out {{ cert_temp_dir.path }}/newcerts/kube-{{ item }}-api-cert.csr \
+      -subj "/CN={{ cert_info.CN }}/O={{ cert_info.O }}/C={{ cert_info.C }}"
+  with_items: "{{ hostvars }}" 
+  run_once: true
+
+- name: Generate the api-cert Cert for each host
+  shell:
+    openssl x509 -req -in {{ cert_temp_dir.path }}/newcerts/kube-{{ item }}-api-cert.csr \
+      -CA {{ cert_temp_dir.path }}/certs/{{ cert_info.O }}-kubernetes-ca.crt \
+      -CAkey {{ cert_temp_dir.path }}/keys/{{ cert_info.O }}-kubernetes-ca.key \
+      -out {{ cert_temp_dir.path }}/certs/kube-{{ item }}-api-cert.crt \
+      -CAcreateserial \
+      -days 2650 
+  with_items: "{{ hostvars }}" 
+  run_once: true

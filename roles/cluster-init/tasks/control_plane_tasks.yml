@@ -1,0 +1,39 @@
+---
+- name: add control plane binaries
+  block:
+  - name: Add binaries
+    get_url:
+      url: "{{ item }}"
+      dest: /root/
+    with_items:
+      - "https://dl.k8s.io/v1.28.1/bin/linux/amd64/kube-apiserver"
+      - "https://dl.k8s.io/v1.28.1/bin/linux/amd64/kube-controller-manager"
+      - "https://dl.k8s.io/v1.28.1/bin/linux/amd64/kube-scheduler"
+ 
+  - name: Make binaries executable and move to executable paths
+    shell: |
+      cd /root
+      chmod +x kube-apiserver kube-controller-manager kube-scheduler 
+      mv kube-apiserver kube-controller-manager kube-scheduler /usr/local/bin/
+    changed_when: False
+
+  - name: Add audit log policy
+    template:
+      src: kube-audit-policy.yaml.j2
+      dest: /etc/kubernetes/config/audit-policy.yaml
+      owner: root
+      group: root
+
+  - name: debug
+    debug:
+      msg: "{{ ca_key_and_cert_creation }}"
+
+
+  - name: Configure service files
+    template:
+      src: "{{ item }}"
+      dest: /usr/lib/systemd/system/{{ item | basename | regex_replace('\.ini$','') }}.service
+    with_items:
+      - ../templates/service_files/kube-apiserver.ini
+      - ../templates/service_files/kube-controller-manager.ini
+      - ../templates/service_files/kube-scheduler.ini
